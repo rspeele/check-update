@@ -3,7 +3,6 @@ package futility
 import "path/filepath"
 import "os"
 import "io"
-import "log"
 
 var selfPath string
 func RecordSelfPath() error {
@@ -42,7 +41,7 @@ func CopyFile(from string, to string, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	err = out.Chmod(mode)
+	out.Chmod(mode) // just attempt this, don't really care so much if it fails
 	return err
 }
 
@@ -72,19 +71,12 @@ func recursiveCopy(path string, info os.FileInfo, from string, to string) error 
 	dir := mode.IsDir()
 	if dir {
 		err = os.Mkdir(target, mode)
-		if err != nil {
-			log.Print(err)
-			return filepath.SkipDir
-		}
-		return nil
+		return err
 	}
 	err = CopyFile(path, target, mode)
-	if err != nil {
-		log.Print(err)
-	}
-	return nil
+	return err
 }
-func RecursiveCopy(from string, to string) {
+func RecursiveCopy(from string, to string) error {
 	dir := filepath.Dir(filepath.Clean(from))
 	walker := func(path string, info os.FileInfo, err error) error {
 		if err == nil {
@@ -92,7 +84,7 @@ func RecursiveCopy(from string, to string) {
 		}
 		return err
 	}
-	filepath.Walk(from, walker)
+	return filepath.Walk(from, walker)
 }
 
 type StatFile struct {

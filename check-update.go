@@ -4,6 +4,7 @@ import (
 	"./checkset"
 	"./futility"
 	"errors"
+	"flag"
 	"os/exec"
 	"io"
 	"log"
@@ -26,7 +27,6 @@ func FindSauerbraten() string {
 	best := ""
 	for i := range env {
 		current := strings.ToLower(env[i])
-		println(current)
 		if strings.HasPrefix(current, "programfiles(x86)=") {
 			best = env[i]
 			break
@@ -76,32 +76,35 @@ func FindTesseract() string {
 
 var MissingPackages = errors.New("you need the packages directory from an install of sauerbraten (see sauerbraten.org)")
 
-func RestorePackages(tesseract string) {
+func RestorePackages(tesseract string) error {
 	sauerbraten := FindSauerbraten()
 	pkgs := "packages"
 	tesspack := path.Join(tesseract, pkgs)
 	tessexist := futility.DirectoryExists(tesspack)
 	if sauerbraten == "" {
 		if !tessexist {
-			panic(MissingPackages)
+			return MissingPackages
 		}
-		return
+		return nil
 	}
 	sauerpack := path.Join(sauerbraten, pkgs)
 	sauerexist := futility.DirectoryExists(sauerpack)
 	if tessexist {
 		if !sauerexist {
 			log.Printf("restoring previously moved packages from %s to %s", tesspack, sauerpack)
-			futility.RecursiveCopy(tesspack, sauerpack)
+			return futility.RecursiveCopy(tesspack, sauerbraten)
 			log.Print("done")
 		}
 	} else if sauerexist {
 		if !tessexist {
 			log.Printf("copying packages from %s to %s", sauerpack, tesspack)
-			futility.RecursiveCopy(sauerpack, tesspack)
+			return futility.RecursiveCopy(sauerpack, tesseract)
 			log.Print("done")
 		}
+	} else {
+		return MissingPackages
 	}
+	return nil
 }
 
 func GetHTTP(url string) (io.ReadCloser, error) {
@@ -174,31 +177,46 @@ func Update(source, update, local string) (int, error) {
 }
 
 func main() {
-	count, err := Update("http://silentunicorn.com/updates/meta/", "meta.chk", path.Dir(os.Args[0]))
-	if err != nil {
-		log.Print(err)
-		return
-	}
-	if count > 0 {
-		// re-launch self
-		if false {
-		cmd := exec.Command(os.Args[0])
-		stdin, _ := cmd.StdinPipe()
-		stdout, _ := cmd.StdoutPipe()
-		stderr, _ := cmd.StderrPipe()
-		go io.Copy(stdin, os.Stdin)
-		go io.Copy(os.Stdout, stdout)
-		go io.Copy(os.Stderr, stderr)
-		cmd.Run()
-		return
+	var err error
+	var count int
+	var tesseract string
+	nolegacy := flag.Bool("self", true, "no legacy") // old updater will pass this as false
+	meta := flag.Bool("meta", true, "update the updater")
+	flag.Parse()
+	os.Remove(os.Args[0] + ".trash")
+	if *meta {
+		count, err = Update("http://silentunicorn.com/updates/meta/", "meta.chk", path.Dir(os.Args[0]))
+		if err != nil {
+			goto end
+		}
+		if count > 0 {
+			// re-launch self
+			cmd := exec.Command(os.Args[0])
+			cmd.Stdin = os.Stdin
+			stdout, _ := cmd.StdoutPipe()
+			stderr, _ := cmd.StderrPipe()
+			go io.Copy(os.Stdout, stdout)
+			go io.Copy(os.Stderr, stderr)
+			cmd.Run()
+			return
 		}
 	}
-	tesseract := FindTesseract()
+	tesseract = FindTesseract()
 	count, err = Update("http://silentunicorn.com/updates/tesseract/", "tesseract.chk", tesseract)
 	if err != nil {
-		log.Print(err)
-		return
+		goto end
 	}
 	log.Printf("%d files required updates", count)
-	RestorePackages(tesseract)
+	err = RestorePackages(tesseract)
+end:
+	if err != nil {
+		log.Print(err)
+		log.Print("your installation is incomplete")
+	} else {
+		log.Print("your installation is up to date")
+	}
+	if *nolegacy {
+		println("--- press return to exit ---")
+		os.Stdin.Read([]byte{})
+	}
 }
