@@ -49,20 +49,19 @@ func FindSauerbraten() string {
 	return ""
 }
 
-func IsTesseract(dir string) bool {
-	return futility.DirectoryExists(path.Join(dir, "tesseract")) &&
-		futility.FileExists(path.Join(dir, "tesseract.bat"))
+func IsTersafari(dir string) bool {
+	return futility.DirectoryExists(path.Join(dir, "tsfmod"));
 }
 
-func FindTesseract() string {
-	child := "tesseract"
-	if IsTesseract(child) {
+func FindTersafari() string {
+	child := "tersafari"
+	if IsTersafari(child) {
 		return child
 	}
 	test := "."
 	lasttest := ""
 	for i := 0; i < 5; i++ {
-		if IsTesseract(test) {
+		if IsTersafari(test) {
 			return test
 		}
 		test = path.Join("..", test)
@@ -76,10 +75,10 @@ func FindTesseract() string {
 
 var MissingPackages = errors.New("you need the packages directory from an install of sauerbraten (see sauerbraten.org)")
 
-func RestorePackages(tesseract string) error {
+func RestorePackages(tersafari string) error {
 	sauerbraten := FindSauerbraten()
 	pkgs := "packages"
-	tesspack := path.Join(tesseract, pkgs)
+	tesspack := path.Join(tersafari, pkgs)
 	tessexist := futility.DirectoryExists(tesspack)
 	if sauerbraten == "" {
 		if !tessexist {
@@ -98,7 +97,7 @@ func RestorePackages(tesseract string) error {
 	} else if sauerexist {
 		if !tessexist {
 			log.Printf("copying packages from %s to %s", sauerpack, tesspack)
-			return futility.RecursiveCopy(sauerpack, tesseract)
+			return futility.RecursiveCopy(sauerpack, tersafari)
 			log.Print("done")
 		}
 	} else {
@@ -179,13 +178,13 @@ func Update(source, update, local string) (int, error) {
 func main() {
 	var err error
 	var count int
-	var tesseract string
+	var tersafari string
 	nolegacy := flag.Bool("self", true, "no legacy") // old updater will pass this as false
 	meta := flag.Bool("meta", true, "update the updater")
 	flag.Parse()
 	os.Remove(os.Args[0] + ".trash")
 	if *meta {
-		count, err = Update("http://silentunicorn.com/updates/meta/", "meta.chk", path.Dir(os.Args[0]))
+		count, err = Update("http://airstrafe.com/updates/meta/", "meta.chk", path.Dir(os.Args[0]))
 		if err != nil {
 			goto end
 		}
@@ -201,13 +200,13 @@ func main() {
 			return
 		}
 	}
-	tesseract = FindTesseract()
-	count, err = Update("http://silentunicorn.com/updates/tesseract/", "tesseract.chk", tesseract)
+	tersafari = FindTersafari()
+	count, err = Update("http://airstrafe.com/updates/tersafari/", "tersafari.chk", tersafari)
 	if err != nil {
 		goto end
 	}
 	log.Printf("%d files required updates", count)
-	err = RestorePackages(tesseract)
+	err = RestorePackages(tersafari)
 end:
 	if err != nil {
 		log.Print(err)
