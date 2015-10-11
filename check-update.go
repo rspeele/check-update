@@ -138,33 +138,38 @@ func(writer *ProgressWriter) Write(p []byte) (n int, err error) {
 func GetSauerbraten() error {
 	const InstallerPath = "Sauerbraten_Installer.exe"
 	var err error
-	timestamp := time.Now().Unix() * 1000
-	url := fmt.Sprintf("http://downloads.sourceforge.net/project/sauerbraten/sauerbraten/2013_01_04/sauerbraten_2013_02_03_collect_edition_windows.exe?r=http%3A%2F%2Fsauerbraten.org%2F&ts=%d&use_mirror=iweb", timestamp)
-	stream, err := GetHTTP(url)
-	if err != nil {
-		log.Print("failed to download Sauerbraten installer")
-		return err
-	}
-	defer func () {
-		stream.Close()
-	}()
-	output, err := os.Create(InstallerPath)
-	if err != nil {
-		log.Print("failed to create Sauerbraten installer file")
-		return err
-	}
-	progress := ProgressWriter{ written:0, lastShown:0 }
-	writer := io.MultiWriter(output, &progress)
-	_, err = io.Copy(writer, stream)
-	if err != nil {
-		log.Print("failed to write installer data")
+	if _, err = os.Stat(InstallerPath); os.IsNotExist(err) {
+		log.Print("downloading Sauerbraten installer, this may take a while")
+		timestamp := time.Now().Unix() * 1000
+		url := fmt.Sprintf("http://downloads.sourceforge.net/project/sauerbraten/sauerbraten/2013_01_04/sauerbraten_2013_02_03_collect_edition_windows.exe?r=http%3A%2F%2Fsauerbraten.org%2F&ts=%d&use_mirror=iweb", timestamp)
+		stream, err := GetHTTP(url)
+		if err != nil {
+			log.Print("failed to download Sauerbraten installer")
+			return err
+		}
+		defer func () {
+			stream.Close()
+		}()
+		output, err := os.Create(InstallerPath + ".part")
+		if err != nil {
+			log.Print("failed to create Sauerbraten installer file")
+			return err
+		}
+		progress := ProgressWriter{ written:0, lastShown:0 }
+		writer := io.MultiWriter(output, &progress)
+		_, err = io.Copy(writer, stream)
+		if err != nil {
+			log.Print("failed to write installer data")
+			output.Close()
+			return err
+		}
 		output.Close()
-		return err
+		os.Rename(InstallerPath + ".part", InstallerPath)
 	}
-	output.Close()
 	err = exec.Command(InstallerPath).Run()
 	if err != nil {
 		log.Print("error running Sauerbraten installer (try running it manually?)")
+		return err
 	}
 	return nil
 }
@@ -209,7 +214,6 @@ func main() {
 	sauer = FindSauerbraten()
 	if sauer == "" {
 		log.Print("you do not appear to have Sauerbraten installed")
-		log.Print("downloading Sauerbraten installer, this may take a while")
 		err = GetSauerbraten()
 		if err != nil {
 			goto end
@@ -227,7 +231,7 @@ end:
 		log.Print(err)
 		log.Print("your installation is incomplete")
 		println("--- press return to exit ---")
-		os.Stdin.Read([]byte{})
+		os.Stdin.Read(make([]byte, 1))
 	} else {
 		log.Print("your installation is up to date")
 	}
