@@ -113,7 +113,7 @@ func Recurse(root string, filter func(StatFile) bool, files chan StatFile) {
 // try hard to create a file with MODE at PATH. creates any missing
 // directories in PATH and will try to move un-writable files out of
 // the way if necessary.
-func Create(path string, mode os.FileMode) (io.WriteCloser, error) {
+func Create(path string, mode os.FileMode) (*os.File, error) {
 	var err error
 	err = os.MkdirAll(filepath.Dir(path), 0744)
 	if err != nil {
@@ -132,6 +132,8 @@ func Create(path string, mode os.FileMode) (io.WriteCloser, error) {
 			} else {
 				break
 			}
+		} else {
+			break
 		}
 	}
 	if err == nil && wr != nil {

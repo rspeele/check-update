@@ -5,13 +5,15 @@ import (
 	"./futility"
 	"errors"
 	"flag"
-	"os/exec"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path"
 	"strings"
+	"time"
 )
 
 func EnvValue(env string) string {
@@ -20,90 +22,6 @@ func EnvValue(env string) string {
 		return ""
 	}
 	return split[1]
-}
-
-func FindSauerbraten() string {
-	env := os.Environ()
-	best := ""
-	for i := range env {
-		current := strings.ToLower(env[i])
-		if strings.HasPrefix(current, "programfiles(x86)=") {
-			best = env[i]
-			break
-		}
-		if strings.HasPrefix(current, "programfiles=") {
-			best = env[i]
-		}
-	}
-	if best == "" {
-		return ""
-	}
-	split := strings.SplitAfterN(best, "=", 2)
-	if len(split) < 2 {
-		return ""
-	}
-	sauerbraten := path.Join(split[1], "Sauerbraten")
-	if futility.DirectoryExists(sauerbraten) {
-		return sauerbraten
-	}
-	return ""
-}
-
-func IsTersafari(dir string) bool {
-	return futility.DirectoryExists(path.Join(dir, "tsfmod"));
-}
-
-func FindTersafari() string {
-	child := "tersafari"
-	if IsTersafari(child) {
-		return child
-	}
-	test := "."
-	lasttest := ""
-	for i := 0; i < 5; i++ {
-		if IsTersafari(test) {
-			return test
-		}
-		test = path.Join("..", test)
-		if test == lasttest {
-			break
-		}
-		lasttest = test
-	}
-	return child
-}
-
-var MissingPackages = errors.New("you need the packages directory from an install of sauerbraten (see sauerbraten.org)")
-
-func RestorePackages(tersafari string) error {
-	sauerbraten := FindSauerbraten()
-	pkgs := "packages"
-	tesspack := path.Join(tersafari, pkgs)
-	tessexist := futility.DirectoryExists(tesspack)
-	if sauerbraten == "" {
-		if !tessexist {
-			return MissingPackages
-		}
-		return nil
-	}
-	sauerpack := path.Join(sauerbraten, pkgs)
-	sauerexist := futility.DirectoryExists(sauerpack)
-	if tessexist {
-		if !sauerexist {
-			log.Printf("restoring previously moved packages from %s to %s", tesspack, sauerpack)
-			return futility.RecursiveCopy(tesspack, sauerbraten)
-			log.Print("done")
-		}
-	} else if sauerexist {
-		if !tessexist {
-			log.Printf("copying packages from %s to %s", sauerpack, tesspack)
-			return futility.RecursiveCopy(sauerpack, tersafari)
-			log.Print("done")
-		}
-	} else {
-		return MissingPackages
-	}
-	return nil
 }
 
 func GetHTTP(url string) (io.ReadCloser, error) {
@@ -175,11 +93,83 @@ func Update(source, update, local string) (int, error) {
 	return count, err
 }
 
+func FindSauerbraten() string {
+	env := os.Environ()
+	best := ""
+	for i := range env {
+		current := strings.ToLower(env[i])
+		if strings.HasPrefix(current, "programfiles(x86)=") {
+			best = env[i]
+			break
+		}
+		if strings.HasPrefix(current, "programfiles=") {
+			best = env[i]
+		}
+	}
+	if best == "" {
+		return ""
+	}
+	split := strings.SplitAfterN(best, "=", 2)
+	if len(split) < 2 {
+		return ""
+	}
+	sauerbraten := path.Join(split[1], "Sauerbraten")
+	if futility.DirectoryExists(sauerbraten) {
+		return sauerbraten
+	}
+	return ""
+}
+
+func GetSauerbraten() error {
+	const InstallerPath = "Sauerbraten_Installer.exe"
+	var err error
+	timestamp := time.Now().Unix() * 1000
+	url := fmt.Sprintf("http://downloads.sourceforge.net/project/sauerbraten/sauerbraten/2013_01_04/sauerbraten_2013_02_03_collect_edition_windows.exe?r=http%3A%2F%2Fsauerbraten.org%2F&ts=%d&use_mirror=iweb", timestamp)
+	stream, err := GetHTTP(url)
+	if err != nil {
+		log.Print("failed to download Sauerbraten installer")
+		return err
+	}
+	defer func () {
+		stream.Close()
+	}()
+	output, err := os.Create(InstallerPath)
+	if err != nil {
+		log.Print("failed to create Sauerbraten installer file")
+		return err
+	}
+	_, err = io.Copy(output, stream)
+	if err != nil {
+		log.Print("failed to write installer data")
+		output.Close()
+		return err
+	}
+	output.Close()
+	err = exec.Command(InstallerPath).Run()
+	if err != nil {
+		log.Print("error running Sauerbraten installer")
+	}
+	os.Remove(InstallerPath)
+	return nil
+}
+
+func RunGame(sauer string) error {
+	wd, _ := os.Getwd()
+	mod := path.Join(wd, "toastermod")
+	exe := path.Join(mod, "toastermod_bin", "toastermod.exe")
+	cmd := exec.Command(exe,
+		"-k" + path.Join(mod, "toastermod"),
+		"-k" + path.Join(mod, "svncompat"),
+		"-q" + path.Join(mod, "userconfig"),
+		"-g" + path.Join(mod, "log.txt"))
+	cmd.Dir = sauer
+	return cmd.Run()
+}
+
 func main() {
 	var err error
 	var count int
-	var tersafari string
-	nolegacy := flag.Bool("self", true, "no legacy") // old updater will pass this as false
+	var sauer string
 	meta := flag.Bool("meta", true, "update the updater")
 	flag.Parse()
 	os.Remove(os.Args[0] + ".trash")
@@ -200,22 +190,26 @@ func main() {
 			return
 		}
 	}
-	tersafari = FindTersafari()
-	count, err = Update("http://airstrafe.com/updates/tersafari/", "tersafari.chk", tersafari)
+	sauer = FindSauerbraten()
+	if sauer == "" {
+		log.Print("you do not appear to have Sauerbraten installed")
+		err = GetSauerbraten()
+		if err != nil {
+			goto end
+		}
+		sauer = FindSauerbraten()
+	}
+	count, err = Update("http://airstrafe.com/updates/toastermod/", "toastermod.chk", "toastermod")
 	if err != nil {
 		goto end
 	}
 	log.Printf("%d files required updates", count)
-	err = RestorePackages(tersafari)
+	err = RunGame(sauer)
 end:
 	if err != nil {
 		log.Print(err)
 		log.Print("your installation is incomplete")
 	} else {
 		log.Print("your installation is up to date")
-	}
-	if *nolegacy {
-		println("--- press return to exit ---")
-		os.Stdin.Read([]byte{})
 	}
 }
