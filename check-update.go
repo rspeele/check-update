@@ -226,6 +226,8 @@ end:
 	if err != nil {
 		log.Print(err)
 		log.Print("your installation is incomplete")
+		println("--- press return to exit ---")
+		os.Stdin.Read([]byte{})
 	} else {
 		log.Print("your installation is up to date")
 	}
