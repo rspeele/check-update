@@ -120,6 +120,21 @@ func FindSauerbraten() string {
 	return ""
 }
 
+type ProgressWriter struct {
+	written int
+	lastShown int
+}
+
+func(writer *ProgressWriter) Write(p []byte) (n int, err error) {
+	const MB = 1024*1024
+	writer.written += len(p)
+	if writer.written > writer.lastShown + MB * 5 {
+		writer.lastShown = writer.written
+		log.Printf("downloaded %d MB", writer.written / MB)
+	}
+	return len(p), nil
+}
+
 func GetSauerbraten() error {
 	const InstallerPath = "Sauerbraten_Installer.exe"
 	var err error
@@ -138,7 +153,9 @@ func GetSauerbraten() error {
 		log.Print("failed to create Sauerbraten installer file")
 		return err
 	}
-	_, err = io.Copy(output, stream)
+	progress := ProgressWriter{ written:0, lastShown:0 }
+	writer := io.MultiWriter(output, &progress)
+	_, err = io.Copy(writer, stream)
 	if err != nil {
 		log.Print("failed to write installer data")
 		output.Close()
@@ -147,9 +164,8 @@ func GetSauerbraten() error {
 	output.Close()
 	err = exec.Command(InstallerPath).Run()
 	if err != nil {
-		log.Print("error running Sauerbraten installer")
+		log.Print("error running Sauerbraten installer (try running it manually?)")
 	}
-	os.Remove(InstallerPath)
 	return nil
 }
 
@@ -193,6 +209,7 @@ func main() {
 	sauer = FindSauerbraten()
 	if sauer == "" {
 		log.Print("you do not appear to have Sauerbraten installed")
+		log.Print("downloading Sauerbraten installer, this may take a while")
 		err = GetSauerbraten()
 		if err != nil {
 			goto end
