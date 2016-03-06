@@ -195,7 +195,7 @@ func main() {
 	flag.Parse()
 	os.Remove(os.Args[0] + ".trash")
 	if *meta {
-		count, err = Update("http://airstrafe.com/updates/meta/", "meta.chk", path.Dir(os.Args[0]))
+		count, err = Update("http://toastermod.com/updates/meta/", "meta.chk", path.Dir(os.Args[0]))
 		if err != nil {
 			goto end
 		}
@@ -220,7 +220,7 @@ func main() {
 		}
 		sauer = FindSauerbraten()
 	}
-	count, err = Update("http://airstrafe.com/updates/toastermod/", "toastermod.chk", "toastermod")
+	count, err = Update("http://toastermod.com/updates/toastermod/", "toastermod.chk", "toastermod")
 	if err != nil {
 		goto end
 	}
